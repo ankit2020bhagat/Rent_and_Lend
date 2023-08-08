@@ -41,7 +41,7 @@ contract RentLend is Ownable {
     error onlyowner();
 
     ///property is booked
-    error checkStatus();
+    error BookedProperty();
 
     ///not having enough ether
     error insufficientBalance();
@@ -69,6 +69,10 @@ contract RentLend is Ownable {
         uint Balance
     );
 
+    mapping(address => BookingDetails) public bookingdetails;
+    mapping(uint => PropertyDetails) public PropertyDetailsId;
+    mapping(uint => address) idToBookingAddress;
+
     /**
      * @dev Modifier to check if the property is booked.
      * @param propertyId The ID of the property to check.
@@ -76,7 +80,7 @@ contract RentLend is Ownable {
     modifier isBooked(uint propertyId) {
         PropertyDetails memory property = PropertyDetailsId[propertyId];
         if (property.isBooked) {
-            revert checkStatus();
+            revert BookedProperty();
         }
         _;
     }
@@ -97,7 +101,7 @@ contract RentLend is Ownable {
      * @dev Modifier to check if the caller is the customer.
      * @param customerAddress The address of the customer to check.
      */
-    modifier onlycustomerOwner(address customerAddress) {
+    modifier OnlyCustomer(address customerAddress) {
         BookingDetails storage _bookingdetails = bookingdetails[
             customerAddress
         ];
@@ -106,10 +110,6 @@ contract RentLend is Ownable {
         }
         _;
     }
-
-    mapping(address => BookingDetails) public bookingdetails;
-    mapping(uint => PropertyDetails) public PropertyDetailsId;
-    mapping(uint => address) idToBookingAddress;
 
     /**
      * @dev Add a new property to the platform.
@@ -159,14 +159,10 @@ contract RentLend is Ownable {
         _bookingdetails.customerAddress = msg.sender;
         _bookingdetails.duration = duration;
         _bookingdetails.startTimeStamp = block.timestamp;
-        _bookingdetails.endTimeStamp = block.timestamp + duration;
+        _bookingdetails.endTimeStamp = block.timestamp + (duration * 24 hours);
         idToBookingAddress[count] = msg.sender;
 
         uint amount = (msg.value * 5) / 100;
-        (bool success, ) = owner().call{value: amount}("");
-        if (!success) {
-            revert failedToTrnasfer();
-        }
         _bookingdetails.bookingAmount = (msg.value * 95) / 100;
         _bookingdetails.Balance[
             PropertyDetailsId[propertyId].propertyOwner
@@ -174,6 +170,10 @@ contract RentLend is Ownable {
         uint Balance = _bookingdetails.Balance[
             PropertyDetailsId[propertyId].propertyOwner
         ];
+        (bool success, ) = owner().call{value: amount}("");
+        if (!success) {
+            revert failedToTrnasfer();
+        }
 
         emit bookProperty(
             _bookingdetails.propertyId,
@@ -208,9 +208,7 @@ contract RentLend is Ownable {
      * @dev Cancel a booking made by a customer.
      * @param bookingId The booking ID to cancel.
      */
-    function cancelBooking(
-        address bookingId
-    ) public onlycustomerOwner(bookingId) {
+    function cancelBooking(address bookingId) public OnlyCustomer(bookingId) {
         BookingDetails storage _bookingdetails = bookingdetails[bookingId];
         PropertyDetails memory _propertyDetails = PropertyDetailsId[
             _bookingdetails.propertyId
