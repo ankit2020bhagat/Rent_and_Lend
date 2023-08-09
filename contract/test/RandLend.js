@@ -48,12 +48,17 @@ describe("Rent And Lend", function () {
     await updateTxn.wait();
     const detailsTxn = await RentLend.PropertyDetailsId(2);
     console.log("Updated Property Details ", detailsTxn.toString());
+    const contractBalance = await hre.ethers.provider.getBalance(
+      RentLend.target
+    );
+    console.log("Contract Balance: ", contractBalance.toString());
   });
 
   it("only customer can cancel their booking", async function () {
     await expect(RentLend.cancelBooking(accounts[8].address)).to.reverted;
     const cancelTxn = await RentLend.cancelBooking(accounts[10].address);
-    await cancelTxn.wait();
+    const bookingDetails = await RentLend.bookingdetails(accounts[10].address);
+    console.log("Bookgin Deataild ", bookingDetails.toString());
     const detailsTxn = await RentLend.get_list_of_rented_property();
     console.log("List of rented Property: ", detailsTxn.toString());
   });

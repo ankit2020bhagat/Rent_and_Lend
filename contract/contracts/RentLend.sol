@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "hardhat/console.sol";
 pragma solidity 0.8.19;
 
 /**
  * @title ReantLend Contract
  * @dev This contract allows property owners to add their properties for rent and customers to book these properties.
  */
-contract RentLend is Ownable {
+contract RentLend is Ownable, ReentrancyGuard {
     using Counters for Counters.Counter;
     Counters.Counter public _tokenIdCounter;
     Counters.Counter public IdtoBooking;
@@ -33,6 +35,7 @@ contract RentLend is Ownable {
         uint startTimeStamp;
         uint endTimeStamp;
         uint bookingAmount;
+        bool isCanceled;
         mapping(address => uint) Balance;
     }
     address counterAddress;
@@ -144,7 +147,7 @@ contract RentLend is Ownable {
     function BookyourProperty(
         uint propertyId,
         uint duration
-    ) public payable isBooked(propertyId) {
+    ) public payable isBooked(propertyId) nonReentrant {
         IdtoBooking.increment();
         uint count = IdtoBooking.current();
         PropertyDetails storage property = PropertyDetailsId[propertyId];
@@ -208,29 +211,33 @@ contract RentLend is Ownable {
      * @dev Cancel a booking made by a customer.
      * @param bookingId The booking ID to cancel.
      */
-    function cancelBooking(address bookingId) public OnlyCustomer(bookingId) {
+    function cancelBooking(
+        address bookingId
+    ) public OnlyCustomer(bookingId) nonReentrant {
         BookingDetails storage _bookingdetails = bookingdetails[bookingId];
-        PropertyDetails memory _propertyDetails = PropertyDetailsId[
+        PropertyDetails storage _propertyDetails = PropertyDetailsId[
             _bookingdetails.propertyId
         ];
-        uint dutationleft = _bookingdetails.endTimeStamp -
-            _bookingdetails.startTimeStamp;
+        uint durationleft = block.timestamp - _bookingdetails.startTimeStamp;
+
         uint amountRemain = _bookingdetails.bookingAmount -
-            dutationleft *
-            _propertyDetails.PricePerDay;
+            (durationleft * _propertyDetails.PricePerDay) /
+            24 hours;
+
+        _bookingdetails.isCanceled = true;
+        _propertyDetails.isBooked = false;
         (bool success, ) = _bookingdetails.customerAddress.call{
             value: amountRemain
         }("");
         if (!success) {
             revert failedToTrnasfer();
         }
-        delete bookingdetails[bookingId];
     }
 
     /**
      * @dev Transfer money to the property owner for completed bookings.
      */
-    function transfer_money_To_propertyOwner() external {
+    function transfer_money_To_propertyOwner() external nonReentrant {
         if (msg.sender != counterAddress) {
             revert();
         }
